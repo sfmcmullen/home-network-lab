@@ -310,7 +310,114 @@ The router, internet, and DNS connectivity tests have previously succeeded. SSH 
 
 A successful ping does not establish that a particular application port is reachable. Test the relevant service directly when troubleshooting.
 
-## 10. Security Considerations
+## 10. Media Drive Maintenance
+
+### Configuration
+
+The server uses an external 2 TB media drive with the following configuration:
+
+| Property                | Value            |
+| ----------------------- | ---------------- |
+| Filesystem              | exFAT            |
+| Filesystem UUID         | `2451-AAE4`      |
+| Mount point             | `/srv/media`     |
+| Jellyfin container path | `/media`         |
+| Mount configuration     | `/etc/fstab`     |
+| Access mode             | Read-only (`ro`) |
+
+The drive is identified by its filesystem UUID in `/etc/fstab`, rather than relying on a device name such as `/dev/sdc1`. This allows the drive to be mounted consistently even if its device name changes after reconnection.
+
+The `nofail` option allows Ubuntu to boot when the external drive is unavailable. However, the drive does not necessarily remount automatically when physically reconnected while the server is running.
+
+### Safely Removing the Drive
+
+**Never unplug the drive while Jellyfin is running or while the filesystem is mounted.** Doing so can interrupt media access and risk filesystem damage.
+
+1. Stop the Jellyfin container:
+
+    ```bash
+    sudo docker stop jellyfin
+    ```
+
+2. Unmount the media drive:
+
+    ```bash
+    sudo umount /srv/media
+    ```
+
+3. Confirm that the filesystem is no longer mounted:
+
+    ```bash
+    findmnt /srv/media
+    ```
+
+    No output should be returned for the mount point.
+
+4. Only unplug the drive after the unmount command succeeds and the filesystem is confirmed to be unmounted.
+
+If the unmount operation reports that the target is busy, do not force it. Check which processes are using the mount:
+
+```bash
+sudo fuser -vm /srv/media
+```
+
+Resolve any remaining access before attempting to unmount again.
+
+### Reconnecting the Drive
+
+1. Reconnect the drive to the server.
+
+2. Confirm that Ubuntu detects it and check its filesystem UUID:
+
+    ```bash
+    lsblk -o NAME,SIZE,FSTYPE,LABEL,UUID,MOUNTPOINTS
+    ```
+
+    Verify that the expected UUID is `2451-AAE4` and the filesystem is exFAT. Do not assume the device will retain the same `/dev/sdX` name.
+
+3. Check the filesystem without modifying it:
+
+    ```bash
+    sudo fsck.exfat -n /dev/disk/by-uuid/2451-AAE4
+    ```
+
+    If the check reports filesystem errors, investigate before continuing. Do not attempt repairs without understanding the reported errors.
+
+4. Mount the drive using the existing `/etc/fstab` configuration:
+
+    ```bash
+    sudo mount /srv/media
+    ```
+
+5. Verify that the correct filesystem is mounted:
+
+    ```bash
+    findmnt /srv/media
+    ```
+
+    Confirm that the source corresponds to the expected drive and the filesystem is exFAT.
+
+6. Check that the media files are accessible:
+
+    ```bash
+    ls -lah /srv/media
+    ```
+
+7. Restart Jellyfin only after confirming that the drive is mounted correctly:
+
+    ```bash
+    sudo docker start jellyfin
+    ```
+
+8. Verify that the container is running:
+
+    ```bash
+    sudo docker ps
+    ```
+
+9. Open Jellyfin on the local network and confirm that the libraries and media are accessible.
+
+## 11. Security Considerations
 
 -   Keep SSH key authentication enabled and password-based SSH login disabled.
 -   Keep SSH restricted to trusted sources.
@@ -319,7 +426,7 @@ A successful ping does not establish that a particular application port is reach
 -   Do not expose SSH or Jellyfin publicly without a deliberate security review.
 -   Do not publish passwords, API tokens, private keys, or other secrets in this repository.
 
-## 11. Change Log
+## 12. Change Log
 
 Record significant configuration changes and how they were tested.
 
