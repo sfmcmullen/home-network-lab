@@ -4,7 +4,7 @@ A self-hosted infrastructure project using Ubuntu Server, Docker, and network se
 
 ## Project Overview
 
-I repurposed an old PC into a headless Ubuntu Server, managed remotely from my Windows PC over SSH. The server runs Jellyfin in Docker, providing a self-hosted media service on my home network.
+I repurposed an old PC into a headless Ubuntu Server, managed remotely from my Windows PC over SSH. The server runs Jellyfin in Docker, providing a self-hosted media service. Caddy runs on the Ubuntu host as a reverse proxy for HTTPS access through `jellyfin.sfmcmullen.com`.
 
 I configured SSH key-based authentication and disabled password-based SSH login. UFW is enabled to restrict inbound traffic, including SSH access to the trusted home IPv4 subnet.
 
@@ -12,20 +12,24 @@ The project is being developed incrementally, with an emphasis on understanding 
 
 ## Infrastructure
 
-| Component              | Configuration                     |
-| ---------------------- | --------------------------------- |
-| Server hostname        | `mcmullen-lab`                    |
-| Operating system       | Ubuntu Server 26.04.1 LTS         |
-| Administration client  | Windows PC                        |
-| Remote administration  | SSH with key-based authentication |
-| Network connectivity   | Wi-Fi via TP-Link Archer T9UH     |
-| Server Wi-Fi address   | `192.168.1.222`                   |
-| Home router            | `192.168.1.254`                   |
-| Firewall               | UFW                               |
-| Container platform     | Docker                            |
-| Hosted service         | Jellyfin                          |
-| Jellyfin host endpoint | `192.168.1.222:8096`              |
-| Media storage          | Dedicated SSD                     |
+| Component              | Configuration                                               |
+| ---------------------- | ----------------------------------------------------------- |
+| Server hostname        | `mcmullen-lab`                                              |
+| Operating system       | Ubuntu Server 26.04.1 LTS                                   |
+| Administration client  | Windows PC                                                  |
+| Remote administration  | SSH with key-based authentication                           |
+| Network connectivity   | Wi-Fi via TP-Link Archer T9UH                               |
+| Server Wi-Fi address   | `192.168.1.222`                                             |
+| Home router            | `192.168.1.254`                                             |
+| Firewall               | UFW                                                         |
+| Container platform     | Docker                                                      |
+| Hosted service         | Jellyfin                                                    |
+| Jellyfin host endpoint | `192.168.1.222:8096`                                        |
+| Reverse proxy          | Caddy, running as a systemd service                         |
+| Public hostname        | `jellyfin.sfmcmullen.com`                                   |
+| DNS                    | Cloudflare DNS-only A record                                |
+| HTTPS certificate      | Let's Encrypt, managed automatically by Caddy               |
+| Media storage          | External 2 TB exFAT drive mounted read-only at `/srv/media` |
 
 ## Security Configuration
 
@@ -33,17 +37,22 @@ The project is being developed incrementally, with an emphasis on understanding 
 -   Password-based SSH authentication is disabled.
 -   UFW is enabled with inbound traffic denied by default.
 -   SSH is restricted to the home IPv4 subnet `192.168.1.0/24`.
--   Jellyfin is accessed over the local network; public access has not been configured.
+-   Caddy is configured to provide the public HTTPS endpoint for Jellyfin.
+-   Cloudflare is configured for DNS resolution only (grey cloud), so the home public IP address is visible and Cloudflare's HTTP proxy protections do not apply.
+-   Jellyfin's port `8096` must not be forwarded directly through the router; public web traffic should reach Caddy on TCP ports `80` and `443`.
+-   UFW IPv6 support is enabled, but the router's IPv6 firewall behaviour still needs to be verified.
 
-These controls address different risks: SSH keys authenticate clients, while firewall rules restrict which sources can reach the service.
+These controls address different risks: SSH keys authenticate clients, firewall rules restrict which sources can reach services, and Caddy provides HTTPS for the public Jellyfin endpoint.
+
+Caddy successfully obtained a Let's Encrypt certificate for `jellyfin.sfmcmullen.com` on 13 October 2026. External access and playback should still be tested from a device outside the home network.
 
 ## Network and Services
 
-The Windows administration PC connects to the Ubuntu server over the home network. The server runs Docker, which hosts Jellyfin in a container.
+The Windows administration PC connects to the Ubuntu server over the home network. The server runs Docker, which hosts Jellyfin in a container. Caddy runs directly on the Ubuntu host and reverse-proxies requests for `jellyfin.sfmcmullen.com` to `192.168.1.222:8096`.
 
 The Docker-published Jellyfin endpoint is bound to the server's Wi-Fi address rather than all host interfaces. Docker also manages its own networking and firewall rules, which must be considered when assessing service exposure.
 
-See [`docs/network-topology.md`](docs/network-topology.md) for addressing, connectivity tests, and configuration details.
+See [`docs/network-topology.md`](docs/network-topology.md) for addressing, connectivity tests, and configuration details. See [`docs/public-jellyfin.md`](docs/public-jellyfin.md) for the Cloudflare DNS, Caddy, HTTPS, router forwarding, verification, and recovery details.
 
 ## Project Objectives
 
@@ -62,7 +71,9 @@ See [`docs/network-topology.md`](docs/network-topology.md) for addressing, conne
 2. Record response times and failures in timestamped logs.
 3. Add automated tests for the monitoring logic.
 4. Build a virtual networking lab to practise static routing, OSPF, and BGP.
-5. Investigate secure remote access and HTTPS for self-hosted services, if required.
+5. Test public Jellyfin access and media playback from outside the home network.
+6. Verify the router's IPv6 firewall policy and review public service exposure.
+7. Investigate dynamic DNS updates if the home public IPv4 address changes.
 
 ## Skills Demonstrated
 
@@ -70,13 +81,17 @@ See [`docs/network-topology.md`](docs/network-topology.md) for addressing, conne
 -   TCP/IP networking and subnetting
 -   SSH and firewall configuration
 -   Docker service deployment
+-   DNS configuration and reverse proxy setup
+-   HTTPS certificate management
 -   Network troubleshooting
 -   Technical documentation
 -   Planned Python automation and monitoring
 
 ## Project Status
 
-**Initial infrastructure configured.** The Ubuntu server is accessible over SSH using key-based authentication, UFW is enabled, and Jellyfin runs in Docker for local-network access.
+**Core infrastructure configured.** The Ubuntu server is accessible over SSH using key-based authentication, UFW is enabled, and Jellyfin runs in Docker with a read-only media mount. Caddy is configured as a reverse proxy for `jellyfin.sfmcmullen.com`, and its logs confirm that a Let's Encrypt HTTPS certificate was obtained successfully.
+
+Remaining checks include testing the Jellyfin page and media playback from outside the home network and verifying the router's IPv6 firewall behaviour.
 
 Further development will focus on network monitoring, automation, and virtual networking experiments.
 
